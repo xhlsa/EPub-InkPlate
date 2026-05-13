@@ -39,6 +39,10 @@ class Screen : NonCopyable
       static constexpr int8_t   IDENT                 =   3;
       static constexpr int16_t  PARTIAL_COUNT_ALLOWED =  10;
       static constexpr uint16_t RESOLUTION            = 212;  ///< Pixels per inch
+    #elif INKPLATE_5V2
+      static constexpr int8_t   IDENT                 =   4;   // unique: invalidates cached 6PLUS layouts
+      static constexpr int16_t  PARTIAL_COUNT_ALLOWED =  10;
+      static constexpr uint16_t RESOLUTION            = 212;   // TODO: verify PPI for 5.83" 1280x720 panel
     #endif
     enum class Orientation     : int8_t { LEFT, RIGHT, BOTTOM, TOP };
     enum class PixelResolution : int8_t { ONE_BIT, THREE_BITS };

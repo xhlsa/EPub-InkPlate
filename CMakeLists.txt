@@ -15,8 +15,14 @@ if(DEVICE MATCHES "^INKPLATE_6$")
     message("INKPLATE 6 defined")
     set(DEVICE_NAME "I6")
     add_compile_definitions(
-        INKPLATE_6=1 
+        INKPLATE_6=1
         MCP23017=1)
+elseif(DEVICE MATCHES "^INKPLATE_5V2$")
+    message("INKPLATE 5V2 defined")
+    set(DEVICE_NAME "I5V2")
+    add_compile_definitions(
+        INKPLATE_5V2=1
+        PCAL6416=1)
 elseif(DEVICE MATCHES  "^INKPLATE_6PLUS$")
     message("INKPLATE 6PLUS defined")
     set(DEVICE_NAME "I6P")

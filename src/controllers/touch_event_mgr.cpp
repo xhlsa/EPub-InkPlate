@@ -758,7 +758,7 @@ const char * EventMgr::event_str[9] = { "NONE",        "TAP",           "HOLD", 
           ESP::delay(500);
 
           #if INKPLATE_5V2
-            #define WAKE_PIN GPIO_NUM_36  // TODO: Verify from schematic
+            #define WAKE_PIN GPIO_NUM_36
             #define WAKE_LEVEL 0
           #else
             #define WAKE_PIN TouchScreen::INTERRUPT_PIN

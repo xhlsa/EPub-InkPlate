@@ -32,6 +32,7 @@ if [ "$3" = "0" ]; then
   case "$2" in
     "6") device="INKPLATE_6" ;;
     "10") device="INKPLATE_10" ;;
+    "5v2") device="INKPLATE_5V2" ;;
     "6plus") device="INKPLATE_6PLUS" ;;
     "6plusv2") device="INKPLATE_6PLUS_V2" ;;
     "6flick") device="INKPLATE_6FLICK" ;;
@@ -90,7 +91,7 @@ cp doc/timezones.csv $folder
 
 if [ "$3" = "0" ]; then
   case "$2" in
-    "6plus"|"6plusv2"|"6flick")  cp "doc/USER GUIDE TOUCH.pdf" "$folder/USER GUIDE.pdf" ;;
+    "6plus"|"6plusv2"|"6flick"|"5v2")  cp "doc/USER GUIDE TOUCH.pdf" "$folder/USER GUIDE.pdf" ;;
     *) cp "doc/USER GUIDE.pdf" "$folder" ;;
   esac
 else

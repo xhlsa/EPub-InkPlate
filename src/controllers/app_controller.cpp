@@ -116,6 +116,11 @@ AppController::input_event(const EventMgr::Event & event)
       CommonActions::power_it_off();
       return;
     }
+  #elif INKPLATE_5V2
+    if (event.kind == EventMgr::EventKind::WAKEUP_BUTTON) {
+      CommonActions::power_it_off();
+      return;
+    }
   #endif
 
   switch (current_ctrl) {

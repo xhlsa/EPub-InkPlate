@@ -51,7 +51,7 @@ CommonActions::power_it_off()
     #define LEVEL 0
   #elif INKPLATE_5V2
     #define MSG "Please press the WakeUp Button to restart the device."
-    #define INT_PIN GPIO_NUM_36  // TODO: Verify from schematic - placeholder value
+    #define INT_PIN GPIO_NUM_36
     #define LEVEL 0
   #else
     #define MSG "Please press a key to restart the device."

@@ -71,7 +71,7 @@
         #define LEVEL 0
       #elif INKPLATE_5V2
         #define MSG "Press the WakeUp Button to restart."
-        #define INT_PIN GPIO_NUM_36  // TODO: Verify from schematic
+        #define INT_PIN GPIO_NUM_36
         #define LEVEL 0
       #else
         #define MSG "Press a key to restart."
