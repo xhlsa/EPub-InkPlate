@@ -284,3 +284,39 @@ wake: 34, 35, 36, 39 (all input-only, RTC-capable). **Read the schematic before 
 of these.**
 
 **Do not proceed past Phase 2 without confirming the wake GPIO from the schematic.**
+
+---
+
+## 12. Phase 3 pre-flight — SD card prep (Steam Deck)
+
+The app requires fonts on the SD card to boot. Without them it panics or hangs before
+the screen lights up — looks like a broken port but isn't. Do this before the first
+flash.
+
+```bash
+cd ~/projects/EPub-InkPlate   # wherever the clone lives on the Deck
+ls SDCard/                     # confirm fonts/ and config.txt are present
+```
+
+SD card mounts at `/run/media/deck/<label>` on SteamOS:
+
+```bash
+cp -r SDCard/fonts /run/media/deck/<your-sd-label>/
+cp SDCard/config.txt /run/media/deck/<your-sd-label>/
+mkdir -p /run/media/deck/<your-sd-label>/books
+# drop a small test .epub in books/
+sync   # SteamOS caches writes aggressively — do not skip
+```
+
+| Path on card | Notes |
+|---|---|
+| `/sdcard/fonts/*.otf` | All fonts from `SDCard/fonts/` |
+| `/sdcard/fonts/drawings.otf` | **Mandatory** — menu icon glyphs |
+| `/sdcard/config.txt` | Defaults work for first boot; app rewrites on first run |
+| `/sdcard/books/*.epub` | At least one test file |
+
+For the test epub: plain prose, under 1 MB, EPub V2 (e.g. *Pride and Prejudice*
+from Project Gutenberg). Avoid illustrated or DRM'd books for first boot.
+
+`SDCard/` in the repo is turgu1's canonical card layout — anything missing from
+your card vs that folder is something the app may complain about.
