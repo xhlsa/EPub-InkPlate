@@ -16,10 +16,15 @@
   #include "inkplate_platform.hpp"
 #endif
 
+// INKPLATE_5V2 uses touch_event_mgr.cpp but has no touchscreen
+#if INKPLATE_5V2
+  #include "inkplate_platform.hpp"
+#endif
+
 class EventMgr
 {
   public:
-    #if INKPLATE_6PLUS || INKPLATE_6PLUS_V2 || INKPLATE_6FLICK || TOUCH_TRIAL
+    #if INKPLATE_6PLUS || INKPLATE_6PLUS_V2 || INKPLATE_6FLICK || INKPLATE_5V2 || TOUCH_TRIAL
       struct CalibPoint {
         uint16_t x[3], y[3];
       };
@@ -30,10 +35,10 @@ class EventMgr
 
   protected:
     volatile bool stay_on;
-    #if INKPLATE_6PLUS || INKPLATE_6PLUS_V2 || INKPLATE_6FLICK || TOUCH_TRIAL
-      
+    #if INKPLATE_6PLUS || INKPLATE_6PLUS_V2 || INKPLATE_6FLICK || INKPLATE_5V2 || TOUCH_TRIAL
+
       int64_t    a, b, c, d, e, f, divider;
-      
+
       CalibPoint calib_point;
       TouchPoint touch_point;
       uint8_t    calib_count;
@@ -49,8 +54,8 @@ class EventMgr
   public:
     static constexpr char const * TAG = "EventMgr";
 
-    #if INKPLATE_6PLUS || INKPLATE_6PLUS_V2 || INKPLATE_6FLICK || TOUCH_TRIAL
-      enum class EventKind { NONE,        TAP,           HOLD,         SWIPE_LEFT, 
+    #if INKPLATE_6PLUS || INKPLATE_6PLUS_V2 || INKPLATE_6FLICK || INKPLATE_5V2 || TOUCH_TRIAL
+      enum class EventKind { NONE,        TAP,           HOLD,         SWIPE_LEFT,
                              SWIPE_RIGHT, PINCH_ENLARGE, PINCH_REDUCE, RELEASE,
                              WAKEUP_BUTTON};
 
@@ -61,11 +66,18 @@ class EventMgr
         uint16_t x, y, dist;
       };
 
-      void show_calibration();
-      bool calibration_event(const Event & event);
+      #if !INKPLATE_5V2
+        void show_calibration();
+        bool calibration_event(const Event & event);
+        void to_user_coord(uint16_t & x, uint16_t & y);
+      #else
+        // INKPLATE_5V2: Stub calibration methods (not used for button-only device)
+        void show_calibration();
+        bool calibration_event(const Event & event);
+        void to_user_coord(uint16_t & x, uint16_t & y);
+      #endif
       void  set_position(uint16_t   x, uint16_t   y) { x_pos = x; y_pos = y; }
       void  get_position(uint16_t & x, uint16_t & y) { x = x_pos; y = y_pos; }
-      void to_user_coord(uint16_t & x, uint16_t & y);
 
     #else
       enum class EventKind { NONE, NEXT, PREV, DBL_NEXT, DBL_PREV, SELECT, DBL_SELECT };

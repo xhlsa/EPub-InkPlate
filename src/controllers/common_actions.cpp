@@ -49,6 +49,10 @@ CommonActions::power_it_off()
     #define MSG "Please press the WakeUp Button to restart the device."
     #define INT_PIN TouchScreen::INTERRUPT_PIN
     #define LEVEL 0
+  #elif INKPLATE_5V2
+    #define MSG "Please press the WakeUp Button to restart the device."
+    #define INT_PIN GPIO_NUM_36  // TODO: Verify from schematic - placeholder value
+    #define LEVEL 0
   #else
     #define MSG "Please press a key to restart the device."
     #define LEVEL 1

@@ -45,7 +45,13 @@ elseif(DEVICE MATCHES "^INKPLATE_6_V2$")
     message("INKPLATE 6 V2 defined")
     set(DEVICE_NAME "I6V2")
     add_compile_definitions(
-        INKPLATE_6_V2=1 
+        INKPLATE_6_V2=1
+        PCAL6416=1)
+elseif(DEVICE MATCHES "^INKPLATE_5V2$")
+    message("INKPLATE 5 V2 defined")
+    set(DEVICE_NAME "I5V2")
+    add_compile_definitions(
+        INKPLATE_5V2=1
         PCAL6416=1)
 else()
     message(FATAL_ERROR "DEVICE NOT defined!!\nExample call: idf.py build -DDEVICE=INKPLATE_6 -DAPP_VERSION=2.1.0")

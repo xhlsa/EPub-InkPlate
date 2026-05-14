@@ -6,7 +6,7 @@
 // Touch Screen calibration algorithm from: https://www.embedded.com/how-to-calibrate-touch-screens
 //
 
-#if INKPLATE_6PLUS || INKPLATE_6PLUS_V2 || INKPLATE_6FLICK || TOUCH_TRIAL
+#if INKPLATE_6PLUS || INKPLATE_6PLUS_V2 || INKPLATE_6FLICK || INKPLATE_5V2 || TOUCH_TRIAL
 
 #define __EVENT_MGR__ 1
 #include "controllers/event_mgr.hpp"
@@ -36,29 +36,39 @@ const char * EventMgr::event_str[9] = { "NONE",        "TAP",           "HOLD", 
   #include "inkplate_platform.hpp"
   #include "viewers/msg_viewer.hpp"
 
-  #if INKPLATE_6FLICK
-    #include "touch_screen_cypress.hpp"
-  #else
-    #include "touch_screen_elan.hpp"
+  #if !INKPLATE_5V2
+    #if INKPLATE_6FLICK
+      #include "touch_screen_cypress.hpp"
+    #else
+      #include "touch_screen_elan.hpp"
+    #endif
   #endif
 
   #include "logging.hpp"
 
-  static QueueHandle_t touchscreen_isr_queue   = NULL;
-  static QueueHandle_t touchscreen_event_queue = NULL;
+  #if !INKPLATE_5V2
+    static QueueHandle_t touchscreen_isr_queue   = NULL;
+    static QueueHandle_t touchscreen_event_queue = NULL;
+  #else
+    // INKPLATE_5V2: Button-based event queue
+    static QueueHandle_t button_event_queue = NULL;
+  #endif
 
-  static void IRAM_ATTR 
-  touchscreen_isr_handler(void * arg)
-  {
-    uint32_t gpio_num = (uint32_t) arg;
-    xQueueSendFromISR(touchscreen_isr_queue, &gpio_num, NULL);
-  }
+  #if !INKPLATE_5V2
+    static void IRAM_ATTR
+    touchscreen_isr_handler(void * arg)
+    {
+      uint32_t gpio_num = (uint32_t) arg;
+      xQueueSendFromISR(touchscreen_isr_queue, &gpio_num, NULL);
+    }
+  #endif
 
-  #define DISTANCE  (sqrt(pow(x_end - x_start, 2) + pow(y_end - y_start, 2)))
-  #define DISTANCE2 (sqrt(pow(x[1] - x[0], 2) + pow(y[1] - y[0], 2)))
+  #if !INKPLATE_5V2
+    #define DISTANCE  (sqrt(pow(x_end - x_start, 2) + pow(y_end - y_start, 2)))
+    #define DISTANCE2 (sqrt(pow(x[1] - x[0], 2) + pow(y[1] - y[0], 2)))
 
-  void
-  get_event_task(void * param)
+    void
+    get_event_task(void * param)
   {
     static constexpr char const * TAG = "GetEventTask";
 
@@ -234,8 +244,8 @@ const char * EventMgr::event_str[9] = { "NONE",        "TAP",           "HOLD", 
       }
 
       if (event.kind != EventMgr::EventKind::NONE) {
-        LOG_D("Input Event %s [%u, %u] (%u)...", 
-              EventMgr::event_str[int(event.kind)], 
+        LOG_D("Input Event %s [%u, %u] (%u)...",
+              EventMgr::event_str[int(event.kind)],
               event.x, event.y,
               event.dist);
         xQueueSend(touchscreen_event_queue, &event, 0);
@@ -243,23 +253,54 @@ const char * EventMgr::event_str[9] = { "NONE",        "TAP",           "HOLD", 
       }
     }
   }
+  #else
+    // INKPLATE_5V2: Simple button polling task
+    void
+    get_event_task(void * param)
+    {
+      static constexpr char const * TAG = "GetEventTask";
+
+      EventMgr::Event event;
+
+      // TODO: Implement button polling via PCAL6416 IO expander
+      // For now, just wait and return NONE events
+      while (true) {
+        event.kind = EventMgr::EventKind::NONE;
+        event.x    = 0;
+        event.y    = 0;
+        event.dist = 0;
+
+        // Wait for 15 seconds before returning NONE
+        vTaskDelay(pdMS_TO_TICKS(15E3));
+        xQueueSend(button_event_queue, &event, 0);
+        taskYIELD();
+      }
+    }
+  #endif
 
   void
   EventMgr::set_orientation(Screen::Orientation orient)
   {
   }
 
-  const EventMgr::Event & 
-  EventMgr::get_event() 
+  const EventMgr::Event &
+  EventMgr::get_event()
   {
     static Event event;
-    if (!xQueueReceive(touchscreen_event_queue, &event, pdMS_TO_TICKS(15E3))) {
-      event.kind = EventKind::NONE;
-    }
+    #if !INKPLATE_5V2
+      if (!xQueueReceive(touchscreen_event_queue, &event, pdMS_TO_TICKS(15E3))) {
+        event.kind = EventKind::NONE;
+      }
+    #else
+      if (!xQueueReceive(button_event_queue, &event, pdMS_TO_TICKS(15E3))) {
+        event.kind = EventKind::NONE;
+      }
+    #endif
     return event;
   }
 
-  void 
+  #if !INKPLATE_5V2
+  void
   EventMgr::show_calibration()
   {
     switch (screen.get_orientation()) {
@@ -515,6 +556,12 @@ const char * EventMgr::event_str[9] = { "NONE",        "TAP",           "HOLD", 
     config.get(Config::Ident::CALIB_F, &f);
     config.get(Config::Ident::CALIB_DIVIDER, &divider);
   }
+  #else
+    // INKPLATE_5V2: No touchscreen calibration needed for button-only device
+    void EventMgr::show_calibration() {}
+    void EventMgr::to_user_coord(uint16_t & x, uint16_t & y) {}
+    bool EventMgr::calibration_event(const Event & event) { return false; }
+  #endif
 #endif
 
 #if EPUB_LINUX_BUILD
@@ -710,24 +757,35 @@ const char * EventMgr::event_str[9] = { "NONE",        "TAP",           "HOLD", 
           LOG_D("Light Sleep for %d minutes...", light_sleep_duration);
           ESP::delay(500);
 
-          if (inkplate_platform.light_sleep(light_sleep_duration, TouchScreen::INTERRUPT_PIN, 0)) {
+          #if INKPLATE_5V2
+            #define WAKE_PIN GPIO_NUM_36  // TODO: Verify from schematic
+            #define WAKE_LEVEL 0
+          #else
+            #define WAKE_PIN TouchScreen::INTERRUPT_PIN
+            #define WAKE_LEVEL 0
+          #endif
+
+          if (inkplate_platform.light_sleep(light_sleep_duration, WAKE_PIN, WAKE_LEVEL)) {
 
             app_controller.going_to_deep_sleep();
-            
+
             LOG_D("Timed out on Light Sleep. Going now to Deep Sleep");
-            
+
             screen.force_full_update();
             msg_viewer.show(
-              MsgViewer::MsgType::INFO, 
-              false, true, 
-              "Deep Sleep", 
+              MsgViewer::MsgType::INFO,
+              false, true,
+              "Deep Sleep",
               "Timeout period exceeded (%d minutes). The device is now "
               "entering into Deep Sleep mode. Please press the WakeUp Button to restart.",
               light_sleep_duration);
             ESP::delay(1000);
 
-            inkplate_platform.deep_sleep(TouchScreen::INTERRUPT_PIN, 0);
+            inkplate_platform.deep_sleep(WAKE_PIN, WAKE_LEVEL);
           }
+
+          #undef WAKE_PIN
+          #undef WAKE_LEVEL
         }
       }
     }
@@ -744,18 +802,27 @@ EventMgr::setup()
                      G_CALLBACK (mouse_event_callback),
                      screen.get_image());
   #else
-    
-    retrieve_calibration_values();
-  
-    touchscreen_isr_queue = xQueueCreate(    //create a queue to handle gpio event from isr
-      20, sizeof(uint32_t));
-    touchscreen_event_queue = xQueueCreate(  //create a queue to handle event from task
-      20, sizeof(EventMgr::Event));
 
-    touch_screen.set_app_isr_handler(touchscreen_isr_handler);
+    #if !INKPLATE_5V2
+      retrieve_calibration_values();
 
-    TaskHandle_t xHandle = NULL;
-    xTaskCreate(get_event_task, "GetEvent", 2000, nullptr, 10, &xHandle);
+      touchscreen_isr_queue = xQueueCreate(    //create a queue to handle gpio event from isr
+        20, sizeof(uint32_t));
+      touchscreen_event_queue = xQueueCreate(  //create a queue to handle event from task
+        20, sizeof(EventMgr::Event));
+
+      touch_screen.set_app_isr_handler(touchscreen_isr_handler);
+
+      TaskHandle_t xHandle = NULL;
+      xTaskCreate(get_event_task, "GetEvent", 2000, nullptr, 10, &xHandle);
+    #else
+      // INKPLATE_5V2: Button-based event handling
+      button_event_queue = xQueueCreate(
+        20, sizeof(EventMgr::Event));
+
+      TaskHandle_t xHandle = NULL;
+      xTaskCreate(get_event_task, "GetEvent", 2000, nullptr, 10, &xHandle);
+    #endif
 
   #endif
 

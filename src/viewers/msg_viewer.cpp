@@ -119,7 +119,7 @@ void MsgViewer::show(
   // Press a Key option
 
   if (press_a_key) {
-    #if INKPLATE_6PLUS || INKPLATE_6PLUS_V2 || INKPLATE_6FLICK || TOUCH_TRIAL
+    #if INKPLATE_6PLUS || INKPLATE_6PLUS_V2 || INKPLATE_6FLICK || INKPLATE_5V2 || TOUCH_TRIAL
       if (msg_type != MsgType::CONFIRM) {
         fmt.align       = CSS::Align::CENTER;
         fmt.font_size   =                  9;
@@ -184,7 +184,7 @@ void MsgViewer::show(
 
 bool MsgViewer::confirm(const EventMgr::Event & event, bool & ok)
 {
-  #if INKPLATE_6PLUS || INKPLATE_6PLUS_V2 || INKPLATE_6FLICK || TOUCH_TRIAL
+  #if INKPLATE_6PLUS || INKPLATE_6PLUS_V2 || INKPLATE_6FLICK || INKPLATE_5V2 || TOUCH_TRIAL
 
     if (event.kind == EventMgr::EventKind::TAP) {
       if ((event.x >= ok_pos.x) && (event.x <= (ok_pos.x + buttons_dim.width )) &&
@@ -352,6 +352,10 @@ MsgViewer::out_of_memory(const char * raison)
   #if INKPLATE_6PLUS || INKPLATE_6PLUS_V2 || INKPLATE_6FLICK
     #define MSG "Press the WakeUp Button to restart."
     #define INT_PIN TouchScreen::INTERRUPT_PIN
+    #define LEVEL 0
+  #elif INKPLATE_5V2
+    #define MSG "Press the WakeUp Button to restart."
+    #define INT_PIN GPIO_NUM_36  // TODO: Verify from schematic
     #define LEVEL 0
   #else
     #define MSG "Press a key to restart."

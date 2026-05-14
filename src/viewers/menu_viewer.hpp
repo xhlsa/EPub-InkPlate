@@ -53,7 +53,7 @@ class MenuViewer
     uint16_t icon_ypos,
              text_ypos;
 
-    #if INKPLATE_6PLUS || INKPLATE_6PLUS_V2 || INKPLATE_6FLICK || TOUCH_TRIAL
+    #if INKPLATE_6PLUS || INKPLATE_6PLUS_V2 || INKPLATE_6FLICK || INKPLATE_5V2 || TOUCH_TRIAL
       bool    hint_shown;
       uint8_t find_index(uint16_t x, uint16_t y);
     #endif
