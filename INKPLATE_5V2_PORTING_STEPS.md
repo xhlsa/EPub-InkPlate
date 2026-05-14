@@ -11,11 +11,16 @@ The InkPlate 5 Gen 2 is a button-only device (no touchscreen) but shares archite
 - Physical buttons instead of touchscreen
 - ESP32 microcontroller
 
-## Build Success Status
+## Current Status (as of 2026-05-13)
 
 ✅ Firmware builds successfully for INKPLATE_5V2
-✅ All compilation errors resolved
-⚠️  Button polling not yet implemented (generates NONE events)
+✅ Firmware flashed successfully via USB
+✅ Device boots to home page
+✅ SD card mounts correctly (SE32G, 30GB)
+✅ System fonts load (Roboto-Medium, drawings.otf)
+✅ User fonts load (Crimson S, Roboto, Roboto Condensed, Open Sans, Ibarra)
+⚠️  EC bitmap fonts missing (non-fatal — see SD Card Setup below)
+⚠️  Button polling not yet implemented (generates NONE events — UI visible but not interactive)
 ⚠️  Wake button GPIO needs verification from schematic (using GPIO_NUM_36 placeholder)
 
 ## Files Modified
@@ -358,6 +363,42 @@ sed -i 's/INKPLATE_6PLUS || INKPLATE_6PLUS_V2 || INKPLATE_6FLICK || TOUCH_TRIAL/
 
 ---
 
+## SD Card Setup
+
+The SD card must be FAT32 formatted with this structure:
+
+```
+/ (root)
+├── fonts_list.xml       ← REQUIRED at root, not inside fonts/
+├── config.txt           ← App settings
+├── fonts/               ← All .otf font files
+│   ├── drawings.otf     ← Icon font (mandatory)
+│   ├── Roboto-Medium.otf
+│   ├── Roboto-MediumItalic.otf
+│   └── ... (all other fonts)
+└── books/               ← EPub files
+    └── *.epub
+```
+
+**Critical:** `fonts_list.xml` must be at the SD card root (`/sdcard/fonts_list.xml`), not inside the `fonts/` directory. The app will abort on boot if this file is missing.
+
+**Source files:** `fonts_list.xml` and `config.txt` are in `SDCard/` in this repository.
+
+### EC Bitmap Fonts (optional)
+
+At boot the log shows:
+```
+E Check File: Font file can't be found: /sdcard/fonts/EC-Regular_284.ibmf
+E Check File: Font file can't be found: /sdcard/fonts/ECSans-Regular_284.ibmf
+E Check File: Font file can't be found: /sdcard/fonts/ECTypewriter-Regular_284.ibmf
+```
+
+These are pre-rendered bitmap fonts optimized for e-ink at 284 PPI. They are referenced in `fonts_list.xml` but missing is non-fatal — the app continues and the font entries are simply skipped. To resolve, either:
+- Generate the `.ibmf` files using the font tooling in the repo
+- Or remove the EC font entries from `fonts_list.xml`
+
+---
+
 ## Build Instructions
 
 1. **Set device target:**
@@ -380,28 +421,37 @@ idf.py build
 idf.py -p /dev/ttyUSB0 flash
 ```
 
+5. **Monitor serial output** (requires real TTY — run in terminal, not Claude Code):
+```bash
+idf.py -p /dev/ttyUSB0 monitor
+```
+
 ---
 
 ## TODO Items
 
-### Critical (Blocking Device Functionality)
+### Critical (Blocking Interactivity)
 1. **Implement button polling in get_event_task()**
    - Read button states from PCAL6416 IO expander via I2C
-   - Map button presses to appropriate EventKind values
-   - Set up interrupt from PCAL6416 to ESP32 for efficient polling
+   - Map button presses to EventKind values (TAP/SWIPE_LEFT/SWIPE_RIGHT)
+   - Set up interrupt from PCAL6416 to ESP32 for power-efficient polling
+   - File: `src/controllers/touch_event_mgr.cpp`, function `get_event_task()` under `#else // INKPLATE_5V2`
    - Reference: ESP-IDF-InkPlate library PCAL6416 driver
 
 2. **Verify wake button GPIO**
-   - Current placeholder: GPIO_NUM_36
-   - Check InkPlate 5 Gen 2 schematic for actual wake button GPIO
-   - Update all 3 locations: common_actions.cpp, main.cpp, msg_viewer.cpp, touch_event_mgr.cpp
+   - Current placeholder: `GPIO_NUM_36`
+   - Check InkPlate 5 Gen 2 schematic for the actual GPIO connected to the wake button
+   - Update in: `common_actions.cpp`, `main.cpp`, `msg_viewer.cpp`, `touch_event_mgr.cpp` (search `TODO: Verify from schematic`)
 
 ### Nice to Have
-3. **Map button events to appropriate EventKind**
-   - Decide button→event mapping (e.g., NEXT button → SWIPE_RIGHT)
-   - Or consider adding button-specific EventKind values to enum
+3. **Map button→EventKind**
+   - Decide the button mapping (e.g., right button → SWIPE_RIGHT for next page, left → SWIPE_LEFT for prev)
+   - Or add NEXT/PREV/SELECT to the touchscreen EventKind enum for cleaner semantics
 
-4. **Test on actual hardware**
+4. **Remove EC font entries from fonts_list.xml** (or generate the .ibmf files)
+   - Eliminates boot-time error log noise
+
+5. **Test on actual hardware**
    - Verify display works correctly
    - Test button input
    - Test power management (deep sleep/wake)
@@ -455,18 +505,18 @@ INKPLATE_5V2 uses the touchscreen Event structure (with x, y, dist fields) even 
 - ~8 controller files (batch update)
 
 **Build result:** ✅ Success
-**Binary size:** Check build output for exact size
+**Binary size:** 1,619,392 bytes (EPub-InkPlate.bin), 33% of app partition free
 **Warnings:** 1 unused variable (non-critical)
 
 ---
 
 ## Testing Checklist
 
-- [ ] Flash firmware to INKPLATE_5V2
-- [ ] Device boots and shows startup message
-- [ ] SD card mounts and fonts load
-- [ ] Books list displays
-- [ ] Button presses generate events (once implemented)
+- [x] Flash firmware to INKPLATE_5V2
+- [x] Device boots and shows home page
+- [x] SD card mounts and fonts load (SE32G, 30GB)
+- [x] Books list displays
+- [ ] Button presses generate events (needs implementation)
 - [ ] Book opens and renders correctly
 - [ ] Page navigation works
 - [ ] Settings menu accessible
@@ -484,6 +534,7 @@ INKPLATE_5V2 uses the touchscreen Event structure (with x, y, dist fields) even 
 
 ---
 
-**Last Updated:** 2025-05-13
+**Last Updated:** 2026-05-13
 **Build Status:** ✅ Compiles successfully
-**Functional Status:** ⚠️ Needs button polling implementation
+**Flash Status:** ✅ Flashed and booting to home page
+**Functional Status:** ⚠️ UI visible, buttons not yet wired up
