@@ -7,15 +7,15 @@ Target: InkPlate 5 Gen 2 (INKPLATE_5V2), single_book BUILD_VARIANT.
 ```bash
 # Source ESP-IDF (Python 3.13 venv, not system 3.14)
 source ~/.espressif/python_env/idf5.5_py3.13_env/bin/activate
-source ~/esp/esp-idf/export.sh
+source ~/esp/v5.5.2/export.sh
 
 cd ~/EPub-InkPlate
 
-# Build
-idf.py -C . -B build_single -D BUILD_VARIANT=single_book build
+# Build (DEVICE and APP_VERSION are required — CMakeLists.txt errors without DEVICE)
+idf.py -C . -B build_single -D BUILD_VARIANT=single_book -D DEVICE=INKPLATE_5V2 -D APP_VERSION=2.1.2 build
 
 # Flash (InkPlate is CH340 on ttyUSB0, NOT ttyACM0 which is the Steam Deck controller)
-idf.py -C . -B build_single -p /dev/ttyUSB0 flash
+idf.py -C . -B build_single -D BUILD_VARIANT=single_book -D DEVICE=INKPLATE_5V2 -D APP_VERSION=2.1.2 -p /dev/ttyUSB0 flash
 
 # Monitor
 python3 ~/monitor.py /dev/ttyUSB0 115200
@@ -26,7 +26,7 @@ esptool.py --chip esp32 --port /dev/ttyUSB0 erase_region 0x9000 0x4000
 
 # Full chip erase + reflash (use when NVS is corrupt or iterator crashes)
 esptool.py --chip esp32 --port /dev/ttyUSB0 erase_flash
-idf.py -C . -B build_single -p /dev/ttyUSB0 flash
+idf.py -C . -B build_single -D BUILD_VARIANT=single_book -D DEVICE=INKPLATE_5V2 -D APP_VERSION=2.1.2 -p /dev/ttyUSB0 flash
 ```
 
 ## USB / Serial
@@ -35,6 +35,20 @@ idf.py -C . -B build_single -p /dev/ttyUSB0 flash
 - `/dev/ttyACM0` is the Steam Deck controller (ID `28de:1205`) — never flash to it
 - If ttyUSB0 is missing: power-cycle the InkPlate; use a data-capable USB cable (not charge-only); try through a powered hub
 - `chmod 777 /dev/ttyUSB0` if permission denied (SteamOS doesn't add deck to dialout)
+
+## Submodule
+
+`components/ESP-IDF-InkPlate` points to `xhlsa/ESP-IDF-InkPlate` (fork of
+`turgu1/ESP-IDF-InkPlate`) on the `inkplate-5v2-port` branch. The fork exists
+because the upstream cannot receive 5V2-specific fixes.
+
+Fresh clone:
+```bash
+git clone https://github.com/xhlsa/EPub-InkPlate
+cd EPub-InkPlate
+git checkout inkplate-5v2-port
+git submodule update --init --recursive
+```
 
 ## SD Card Layout
 
@@ -59,7 +73,9 @@ Config.txt values like `show_heap=1`, `show_title=1`, `resolution=1` are **ignor
 
 ### Pixel Resolution / Partial Refresh
 - Always use `Screen::PixelResolution::ONE_BIT` — THREE_BITS disables partial refresh (10× slower page turns)
-- `show_page_full()` calls `screen.force_full_update()` before every render to prevent ghost artifacts from partial updates
+- `screen.update()` manages a `partial_count` counter (`PARTIAL_COUNT_ALLOWED = 10`): first render after `screen.setup()` is always a full refresh (`partial_count` initialised to 0), then up to 10 partial refreshes, then a full refresh to clear ghost buildup, and so on
+- **Do not call `screen.force_full_update()` before page turns** — it resets the counter to 0, forcing a full refresh (8 clean passes + 5 frame scans, ~2× slower) on every page turn
+- `force_full_update()` is appropriate only for the status overlay and message viewer, which paint over live content and need a clean slate
 
 ### Sleep & Wake
 - Deep sleep via `inkplate_platform.deep_sleep(GPIO_NUM_36, 0)` — wake pin is GPIO 36, active LOW
@@ -130,6 +146,35 @@ save() → books_dir.set_track_order(id, pos)
 
 ### NVS iterator leak (pre-existing, benign)
 In `NVSMgr::setup()`, if `res != ESP_OK` on the first `nvs_entry_find()` call, `nvs_release_iterator(it)` is still called with an invalid iterator. Harmless in practice (IDF handles null-ish iterators gracefully) but worth noting.
+
+## EInk Driver — 5V2-Specific Bugs (in submodule)
+
+### Partial-refresh split-screen — `uint16_t pos` overflow (FIXED)
+**`components/ESP-IDF-InkPlate/src/drivers/eink_5v2.cpp:351`**
+
+`BITMAP_SIZE_1BIT = (1280 × 720) / 8 = 115 200`, which exceeds `uint16_t` max (65 535).
+The original declaration:
+```cpp
+uint16_t pos = BITMAP_SIZE_1BIT - 1;  // 115199 → truncated to 49663
+```
+caused the diff fill loop in `partial_update()` to start in the middle of the
+framebuffer. Bytes 65 536–115 199 (rows 410–719, the top ~43% of the panel) were
+never read; their waveform data in `p_buffer` was computed against byte 0. This
+produced correct partial updates on the bottom ~57% of the display and corrupted
+updates on the top ~43% — visible as a horizontal split.
+
+The 6V2 driver has identical code but `BITMAP_SIZE_1BIT = 60 000`, which fits in
+`uint16_t`, so the bug never manifested there.
+
+**Fix** (committed to `xhlsa/ESP-IDF-InkPlate` on `inkplate-5v2-port`):
+```cpp
+size_t pos = BITMAP_SIZE_1BIT - 1;
+```
+
+When porting driver code from a smaller InkPlate variant to the 5V2, audit every
+`uint16_t` used as a framebuffer index or size — the 5V2's 115 200-byte bitmap
+exceeds `uint16_t` range, while all smaller panels (6, 6V2, 6PLUS, 10) stay
+within it.
 
 ## Backtrace Decoding
 
