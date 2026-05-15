@@ -150,9 +150,10 @@ static void mainTask(void * /*params*/)
   // to 720×1280 portrait, which is correct when the device is held vertically.
   // This must stay consistent across boots — changing orientation invalidates NVS
   // page offsets and breaks position restore.
-  Screen::Orientation orientation = Screen::Orientation::RIGHT;
-  config.get(Config::Ident::ORIENTATION, (int8_t *) &orientation);
-  screen.setup(Screen::PixelResolution::ONE_BIT, orientation);
+  // LEFT and RIGHT are both portrait (720×1280) — same page layout, same NVS offsets.
+  // LEFT rotates 180° relative to RIGHT; use LEFT so the device reads naturally
+  // with the USB port at the bottom.
+  screen.setup(Screen::PixelResolution::ONE_BIT, Screen::Orientation::LEFT);
 
   if (!nvs_ok) {
     msg_viewer.show(MsgViewer::MsgType::ALERT, false, true,

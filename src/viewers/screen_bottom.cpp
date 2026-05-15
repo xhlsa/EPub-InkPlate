@@ -64,14 +64,16 @@ ScreenBottom::show(int16_t page_nbr, int16_t page_count)
                         Screen::get_height() + font->get_descender_height(FONT_SIZE) - 2), 
                     fmt);
   }
+  #if !SINGLE_BOOK_BUILD
   else if (page_count != -1) {
     ostr << "PgCalc... " << page_count << "%";
 
-    page.put_str_at(ostr.str(), 
-                    Pos(Page::HORIZONTAL_CENTER, 
-                        Screen::get_height() + font->get_descender_height(FONT_SIZE) - 2), 
+    page.put_str_at(ostr.str(),
+                    Pos(Page::HORIZONTAL_CENTER,
+                        Screen::get_height() + font->get_descender_height(FONT_SIZE) - 2),
                     fmt);
   }
+  #endif
 
   #if EPUB_INKPLATE_BUILD && !SINGLE_BOOK_BUILD
     int8_t show_heap = 0;
