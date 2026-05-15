@@ -19,7 +19,12 @@
 //   double press → previous page
 //   long press   → status overlay (page X/Y + battery)
 //   very long    → save position + deep sleep
-//   idle 3 min   → auto deep sleep
+//   idle 30 min  → auto deep sleep
+//
+// Sleep behaviour: no "going to sleep" message is shown — the e-ink panel
+// retains the last book page without power, so the page IS the sleep indicator.
+// On wake the device re-renders the same page from NVS; cold boots show a
+// brief "Loading..." splash, wake-from-sleep skips it.
 
 #define __GLOBAL__ 1
 #include "global.hpp"
@@ -45,8 +50,7 @@
 #include "single_book/status_overlay.hpp"
 #include "utils/book_id.hpp"
 
-#include "esp_chip_info.h"
-#include "esp_flash.h"
+#include "esp_sleep.h"
 
 extern "C" {
   #include <dirent.h>
@@ -59,7 +63,7 @@ static constexpr char const * TAG      = "single_book";
 static constexpr gpio_num_t   WAKE_PIN = GPIO_NUM_36;
 
 static constexpr uint32_t IDLE_POLL_MS          =   100;
-static constexpr uint32_t DEEP_SLEEP_TIMEOUT_MS = 3 * 60 * 1000;
+static constexpr uint32_t DEEP_SLEEP_TIMEOUT_MS = 30 * 60 * 1000;  // 30 minutes
 
 // Returns the bare filename of the first .epub in BOOKS_FOLDER, or "".
 static std::string find_first_epub()
@@ -93,19 +97,27 @@ static void persist_position(uint32_t                  book_id,
   nvs_mgr.save_location(book_id, data);
 }
 
+// Save position and sleep. No message is shown: the e-ink panel keeps the current
+// page visible without power, so the page itself signals the sleeping state.
 static void go_to_sleep(uint32_t book_id, const PageLocs::PageId & page_id)
 {
   persist_position(book_id, page_id, true);
-  msg_viewer.show(MsgViewer::MsgType::INFO, false, true,
-    "Going to sleep", "Press WakeUp to resume.");
-  ESP::delay(500);
   inkplate_platform.deep_sleep(WAKE_PIN, 0);
   // not reached
+}
+
+// Render page with a guaranteed full refresh to avoid partial-update ghost artifacts.
+static void show_page_full(const PageLocs::PageId & page_id)
+{
+  screen.force_full_update();
+  book_viewer.show_page(page_id);
 }
 
 static void mainTask(void * /*params*/)
 {
   LOG_I("Single-book EPub reader starting.");
+
+  bool waking = (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT0);
 
   // --- Hardware init ---
   bool nvs_ok = nvs_mgr.setup();
@@ -118,6 +130,9 @@ static void mainTask(void * /*params*/)
 
   // config failure is non-fatal: font index defaults to 0 (first USER font)
   config.read();
+  // show_heap and show_title are suppressed in SINGLE_BOOK_BUILD via compile-time
+  // guards in screen_bottom.cpp and book_viewer.cpp so they cannot be overridden
+  // here. orientation and resolution are hardcoded in screen.setup() below.
 
   pugi::set_memory_management_functions(allocate, free);
 
@@ -129,10 +144,10 @@ static void mainTask(void * /*params*/)
     esp_restart();
   }
 
-  Screen::Orientation     orientation = Screen::Orientation::TOP;
-  config.get(Config::Ident::ORIENTATION, (int8_t *) &orientation);
-  // ONE_BIT is always used: grayscale disables partial refresh, making page turns ~10× slower.
-  screen.setup(Screen::PixelResolution::ONE_BIT, orientation);
+  // ONE_BIT: grayscale (THREE_BITS) disables partial refresh, making page turns slow.
+  // TOP: RIGHT orientation swaps width/height, rendering 720×1280 portrait on a
+  //      landscape 1280×720 panel — pages split across wrong axis.
+  screen.setup(Screen::PixelResolution::ONE_BIT, Screen::Orientation::TOP);
 
   if (!nvs_ok) {
     msg_viewer.show(MsgViewer::MsgType::ALERT, false, true,
@@ -169,10 +184,13 @@ static void mainTask(void * /*params*/)
   }
 
   // --- Open book ---
-  // Sequence mirrors BookController::open_book_file() without the
-  // books_dir_controller / app_controller dependencies.
-  msg_viewer.show(MsgViewer::MsgType::BOOK, false, false,
-    "Loading", "\"%s\" — please wait.", book_fname.c_str());
+  // On wake from deep sleep, skip the "Loading..." splash — the e-ink panel
+  // already shows the book page from before sleep, so a silent reload feels
+  // seamless. On cold boot, show the splash so the user knows something is happening.
+  if (!waking) {
+    msg_viewer.show(MsgViewer::MsgType::BOOK, false, false,
+      "Loading", "\"%s\" — please wait.", book_fname.c_str());
+  }
 
   bool new_document = (book_fname != epub.get_current_filename());
   if (new_document) page_locs.stop_document();
@@ -195,7 +213,9 @@ static void mainTask(void * /*params*/)
                                        ? *id
                                        : PageLocs::PageId(0, 0);
 
-  book_viewer.show_page(current_page_id);
+  // Initial render — partial_count is 0 after screen.setup(), so this is already
+  // a full refresh. force_full_update() is redundant here but kept for clarity.
+  show_page_full(current_page_id);
 
   // --- Button manager ---
   WakeButtonMgr buttons(WAKE_PIN);
@@ -214,7 +234,7 @@ static void mainTask(void * /*params*/)
           page_locs.get_next_page_id(current_page_id);
         if (next != nullptr) {
           current_page_id = *next;
-          book_viewer.show_page(current_page_id);
+          show_page_full(current_page_id);
           persist_position(book_id, current_page_id, false);
         }
         last_activity_ms = ESP::millis();
@@ -226,7 +246,7 @@ static void mainTask(void * /*params*/)
           page_locs.get_prev_page_id(current_page_id);
         if (prev != nullptr) {
           current_page_id = *prev;
-          book_viewer.show_page(current_page_id);
+          show_page_full(current_page_id);
           persist_position(book_id, current_page_id, false);
         }
         last_activity_ms = ESP::millis();

@@ -73,7 +73,7 @@ ScreenBottom::show(int16_t page_nbr, int16_t page_count)
                     fmt);
   }
 
-  #if EPUB_INKPLATE_BUILD
+  #if EPUB_INKPLATE_BUILD && !SINGLE_BOOK_BUILD
     int8_t show_heap = 0;
     config.get(Config::Ident::SHOW_HEAP, &show_heap);
 
@@ -81,13 +81,13 @@ ScreenBottom::show(int16_t page_nbr, int16_t page_count)
       ostr.str(std::string());
       ostr << uxTaskGetStackHighWaterMark(nullptr)
            << " / "
-           << heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) 
-           << " / " 
+           << heap_caps_get_largest_free_block(MALLOC_CAP_8BIT)
+           << " / "
            << heap_caps_get_free_size(MALLOC_CAP_8BIT);
       fmt.align = CSS::Align::RIGHT;
-      page.put_str_at(ostr.str(), 
-                      Pos(Page::HORIZONTAL_CENTER, 
-                          Screen::get_height() + font->get_descender_height(FONT_SIZE) - 2), 
+      page.put_str_at(ostr.str(),
+                      Pos(Page::HORIZONTAL_CENTER,
+                          Screen::get_height() + font->get_descender_height(FONT_SIZE) - 2),
                       fmt);
     }
 
