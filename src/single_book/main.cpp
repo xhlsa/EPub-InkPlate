@@ -132,7 +132,8 @@ static void mainTask(void * /*params*/)
   config.read();
   // show_heap and show_title are suppressed in SINGLE_BOOK_BUILD via compile-time
   // guards in screen_bottom.cpp and book_viewer.cpp so they cannot be overridden
-  // here. orientation and resolution are hardcoded in screen.setup() below.
+  // here. Resolution is hardcoded ONE_BIT in screen.setup() below; orientation
+  // is read from config so it stays consistent with any previously saved NVS offsets.
 
   pugi::set_memory_management_functions(allocate, free);
 
@@ -145,9 +146,13 @@ static void mainTask(void * /*params*/)
   }
 
   // ONE_BIT: grayscale (THREE_BITS) disables partial refresh, making page turns slow.
-  // TOP: RIGHT orientation swaps width/height, rendering 720×1280 portrait on a
-  //      landscape 1280×720 panel — pages split across wrong axis.
-  screen.setup(Screen::PixelResolution::ONE_BIT, Screen::Orientation::TOP);
+  // Orientation is read from config (default RIGHT=1): RIGHT maps the 1280×720 panel
+  // to 720×1280 portrait, which is correct when the device is held vertically.
+  // This must stay consistent across boots — changing orientation invalidates NVS
+  // page offsets and breaks position restore.
+  Screen::Orientation orientation = Screen::Orientation::RIGHT;
+  config.get(Config::Ident::ORIENTATION, (int8_t *) &orientation);
+  screen.setup(Screen::PixelResolution::ONE_BIT, orientation);
 
   if (!nvs_ok) {
     msg_viewer.show(MsgViewer::MsgType::ALERT, false, true,
