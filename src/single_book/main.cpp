@@ -130,10 +130,9 @@ static void mainTask(void * /*params*/)
   }
 
   Screen::Orientation     orientation = Screen::Orientation::TOP;
-  Screen::PixelResolution resolution  = Screen::PixelResolution::ONE_BIT;
-  config.get(Config::Ident::ORIENTATION,      (int8_t *) &orientation);
-  config.get(Config::Ident::PIXEL_RESOLUTION, (int8_t *) &resolution);
-  screen.setup(resolution, orientation);
+  config.get(Config::Ident::ORIENTATION, (int8_t *) &orientation);
+  // ONE_BIT is always used: grayscale disables partial refresh, making page turns ~10× slower.
+  screen.setup(Screen::PixelResolution::ONE_BIT, orientation);
 
   if (!nvs_ok) {
     msg_viewer.show(MsgViewer::MsgType::ALERT, false, true,
