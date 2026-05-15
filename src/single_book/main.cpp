@@ -106,10 +106,8 @@ static void go_to_sleep(uint32_t book_id, const PageLocs::PageId & page_id)
   // not reached
 }
 
-// Render page with a guaranteed full refresh to avoid partial-update ghost artifacts.
-static void show_page_full(const PageLocs::PageId & page_id)
+static void show_page(const PageLocs::PageId & page_id)
 {
-  screen.force_full_update();
   book_viewer.show_page(page_id);
 }
 
@@ -221,7 +219,7 @@ static void mainTask(void * /*params*/)
 
   // Initial render — partial_count is 0 after screen.setup(), so this is already
   // a full refresh. force_full_update() is redundant here but kept for clarity.
-  show_page_full(current_page_id);
+  show_page(current_page_id);
 
   // --- Button manager ---
   WakeButtonMgr buttons(WAKE_PIN);
@@ -240,7 +238,7 @@ static void mainTask(void * /*params*/)
           page_locs.get_next_page_id(current_page_id);
         if (next != nullptr) {
           current_page_id = *next;
-          show_page_full(current_page_id);
+          show_page(current_page_id);
           persist_position(book_id, current_page_id, false);
         }
         last_activity_ms = ESP::millis();
@@ -252,7 +250,7 @@ static void mainTask(void * /*params*/)
           page_locs.get_prev_page_id(current_page_id);
         if (prev != nullptr) {
           current_page_id = *prev;
-          show_page_full(current_page_id);
+          show_page(current_page_id);
           persist_position(book_id, current_page_id, false);
         }
         last_activity_ms = ESP::millis();
