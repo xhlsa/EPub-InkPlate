@@ -86,7 +86,7 @@ enum class ConfigIdent {
   static const int8_t   default_show_title         =  1;
   static const int8_t   default_front_light        = 15;  // value between 0 and 63
   static const int8_t   default_dir_view           =  0;  // 0 = linear view, 1 = matrix view
-  static const int8_t   default_page_turn_mode     =  0;  // 0 = normal, 1 = force full, 2 = progressive
+  static const int8_t   default_page_turn_mode     =  2;  // 0 = normal, 1 = force full, 2 = progressive
   static const int8_t   default_progressive_stripes=  4;  // stripe count for progressive mode
   static const int8_t   the_version                =  1;
 
