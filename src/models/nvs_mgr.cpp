@@ -236,12 +236,14 @@ NVSMgr::save(uint32_t id, const NVSData & nvs_data)
       }
       track_list[index] = id;
       track_count++;
-      int8_t pos = 0;
-      for (TrackList::reverse_iterator rit = track_list.rbegin(); 
-           rit != track_list.rend(); 
-           rit++, pos++) {
-        books_dir.set_track_order(rit->second, pos);
-      }
+      #if !SINGLE_BOOK_BUILD
+        int8_t pos = 0;
+        for (TrackList::reverse_iterator rit = track_list.rbegin();
+             rit != track_list.rend();
+             rit++, pos++) {
+          books_dir.set_track_order(rit->second, pos);
+        }
+      #endif
       return true;
     }
     else {
@@ -279,7 +281,9 @@ NVSMgr::remove(uint32_t index)
     std::string key = bld_key("ID_", index);
     uint32_t the_id;
     if (nvs_get_u32(nvs_handle, key.c_str(), &the_id) == ESP_OK) {
-      books_dir.set_track_order(the_id, -1);
+      #if !SINGLE_BOOK_BUILD
+        books_dir.set_track_order(the_id, -1);
+      #endif
     }
     nvs_erase_key(nvs_handle, key.c_str());
     key = bld_key("DATA_", index);
