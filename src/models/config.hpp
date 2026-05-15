@@ -9,8 +9,9 @@
 
 enum class ConfigIdent { 
   VERSION, SSID, PWD, PORT, BATTERY, FONT_SIZE, TIMEOUT, ORIENTATION, 
-  USE_FONTS_IN_BOOKS, DEFAULT_FONT, SHOW_IMAGES, PIXEL_RESOLUTION, SHOW_HEAP, 
+  USE_FONTS_IN_BOOKS, DEFAULT_FONT, SHOW_IMAGES, PIXEL_RESOLUTION, SHOW_HEAP,
   SHOW_TITLE, FRONT_LIGHT, DIR_VIEW, DNS_NAME, AP_SSID, AP_PWD,
+  PAGE_TURN_MODE, PROGRESSIVE_STRIPES,
   #if DATE_TIME_RTC
     SHOW_RTC,
     NTP_SERVER,
@@ -23,15 +24,15 @@ enum class ConfigIdent {
 
 #if INKPLATE_6PLUS || INKPLATE_6PLUS_V2 || INKPLATE_6FLICK
   #if DATE_TIME_RTC
-    typedef ConfigBase<ConfigIdent, 29> Config;
+    typedef ConfigBase<ConfigIdent, 31> Config;
   #else
-    typedef ConfigBase<ConfigIdent, 26> Config;
+    typedef ConfigBase<ConfigIdent, 28> Config;
   #endif
 #else
   #if DATE_TIME_RTC
-    typedef ConfigBase<ConfigIdent, 22> Config;
+    typedef ConfigBase<ConfigIdent, 24> Config;
   #else
-    typedef ConfigBase<ConfigIdent, 19> Config;
+    typedef ConfigBase<ConfigIdent, 21> Config;
   #endif
 #endif
 
@@ -59,6 +60,8 @@ enum class ConfigIdent {
   static int8_t   show_title;
   static int8_t   front_light;
   static int8_t   dir_view;
+  static int8_t   page_turn_mode;
+  static int8_t   progressive_stripes;
 
   #if DATE_TIME_RTC
     static int8_t show_rtc;
@@ -83,6 +86,8 @@ enum class ConfigIdent {
   static const int8_t   default_show_title         =  1;
   static const int8_t   default_front_light        = 15;  // value between 0 and 63
   static const int8_t   default_dir_view           =  0;  // 0 = linear view, 1 = matrix view
+  static const int8_t   default_page_turn_mode     =  0;  // 0 = normal, 1 = force full, 2 = progressive
+  static const int8_t   default_progressive_stripes=  4;  // stripe count for progressive mode
   static const int8_t   the_version                =  1;
 
   static const int8_t   default_show_rtc           =  0;
@@ -110,6 +115,8 @@ enum class ConfigIdent {
     { Config::Ident::SHOW_TITLE,         Config::EntryType::BYTE,   "show_title",         &show_title,         &default_show_title,         0 },
     { Config::Ident::FRONT_LIGHT,        Config::EntryType::BYTE,   "front_light",        &front_light,        &default_front_light,        0 },
     { Config::Ident::DIR_VIEW,           Config::EntryType::BYTE,   "dir_view",           &dir_view,           &default_dir_view,           0 },
+    { Config::Ident::PAGE_TURN_MODE,     Config::EntryType::BYTE,   "page_turn_mode",     &page_turn_mode,     &default_page_turn_mode,     0 },
+    { Config::Ident::PROGRESSIVE_STRIPES,Config::EntryType::BYTE,   "progressive_stripes",&progressive_stripes,&default_progressive_stripes,0 },
 
     #if DATE_TIME_RTC
     { Config::Ident::SHOW_RTC,           Config::EntryType::BYTE,   "show_rtc",           &show_rtc,           &default_show_rtc,           0 },
