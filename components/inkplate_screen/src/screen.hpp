@@ -113,6 +113,7 @@ class Screen : NonCopyable
 
     enum class Corner : uint8_t { TOP_LEFT, TOP_RIGHT, LOWER_LEFT, LOWER_RIGHT };
     void draw_arc(uint16_t x_mid,  uint16_t y_mid,  uint8_t radius, Corner corner, uint8_t color);
+    void restore_stripe_user_space(int user_y, int user_height);
 
     inline void set_pixel_o_left_1bit(uint32_t col, uint32_t row, uint8_t color) {
       uint8_t * temp = &(frame_buffer_1bit->get_data())[frame_buffer_1bit->get_data_size() - (frame_buffer_1bit->get_line_size() * (col + 1)) + (row >> 3)];

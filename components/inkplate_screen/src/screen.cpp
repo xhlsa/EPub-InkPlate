@@ -467,40 +467,102 @@ Screen::setup(PixelResolution resolution, Orientation orientation)
   clear();
 }
 
+// Copies one user-visible horizontal stripe from capture_buffer_ into
+// frame_buffer_1bit. Rotation-aware: maps user y-range to the correct
+// physical byte range for the current orientation.
+void
+Screen::restore_stripe_user_space(int user_y, int user_height)
+{
+  uint8_t * fb        = frame_buffer_1bit->get_data();
+  int16_t   line_size = frame_buffer_1bit->get_line_size();
+
+  switch (orientation) {
+    case Orientation::LEFT: {
+      // Physical row i  →  user column (width - 1 - i).
+      // Byte within row →  user_y >> 3.
+      // All physical rows carry the same user y span.
+      int32_t byte_start = user_y >> 3;
+      int32_t byte_end   = (user_y + user_height - 1) >> 3;
+      int32_t byte_count = byte_end - byte_start + 1;
+      for (int r = 0; r < (int)width; r++) {
+        int32_t off = (int32_t)r * line_size + byte_start;
+        memcpy(fb + off, capture_buffer_ + off, byte_count);
+      }
+      break;
+    }
+    case Orientation::RIGHT: {
+      // Byte within row  →  line_size - 1 - (user_y >> 3).
+      // Top of screen (user_y=0) is at the HIGH end of each row.
+      int32_t byte_start = line_size - 1 - ((user_y + user_height - 1) >> 3);
+      int32_t byte_end   = line_size - 1 - (user_y >> 3);
+      int32_t byte_count = byte_end - byte_start + 1;
+      for (int r = 0; r < (int)width; r++) {
+        int32_t off = (int32_t)r * line_size + byte_start;
+        memcpy(fb + off, capture_buffer_ + off, byte_count);
+      }
+      break;
+    }
+    case Orientation::BOTTOM: {
+      // Physical row == user row — contiguous in the buffer.
+      int32_t off   = (int32_t)user_y * line_size;
+      int32_t count = (int32_t)user_height * line_size;
+      memcpy(fb + off, capture_buffer_ + off, count);
+      break;
+    }
+    case Orientation::TOP: {
+      // Physical row (height-1-user_row) — reversed contiguous block.
+      int32_t off   = frame_buffer_1bit->get_data_size()
+                      - (int32_t)(user_y + user_height) * line_size;
+      int32_t count = (int32_t)user_height * line_size;
+      memcpy(fb + off, capture_buffer_ + off, count);
+      break;
+    }
+  }
+}
+
 void
 Screen::full_refresh_progressive(int stripe_count)
 {
   if (pixel_resolution != PixelResolution::ONE_BIT || capture_buffer_ == nullptr) {
-    if (pixel_resolution == PixelResolution::ONE_BIT) {
+    if (pixel_resolution == PixelResolution::ONE_BIT)
       e_ink.update(*frame_buffer_1bit);
-    } else {
+    else
       e_ink.update(*frame_buffer_3bit);
-    }
     return;
   }
 
   uint8_t * fb_data = frame_buffer_1bit->get_data();
   int32_t   fb_size = frame_buffer_1bit->get_data_size();
 
+  // Snapshot the rendered page before we touch the framebuffer.
   memcpy(capture_buffer_, fb_data, fb_size);
 
-  // Black flash
+  // If allow_partial hasn't been primed yet (first render after boot/setup),
+  // do one silent full refresh so subsequent partial_update calls won't fall
+  // back to the full 8-pass clean sequence.
+  if (partial_count <= 0) {
+    memset(fb_data, 0x00, fb_size);     // all white — minimal visual disruption
+    e_ink.update(*frame_buffer_1bit);   // primes allow_partial; unavoidable on cold start
+    partial_count = PARTIAL_COUNT_ALLOWED;
+  }
+
+  // Single black flash via partial update (one waveform cycle, not 8 passes).
   memset(fb_data, 0xFF, fb_size);
-  e_ink.update(*frame_buffer_1bit);
+  e_ink.partial_update(*frame_buffer_1bit);
 
-  // White flash
+  // Single white flash.
   memset(fb_data, 0x00, fb_size);
-  e_ink.update(*frame_buffer_1bit);
+  e_ink.partial_update(*frame_buffer_1bit);
 
-  // Stripe reveals — buffer start = physical top of panel (orientation-dependent)
+  // Progressive stripe reveal in user-visible top-to-bottom order.
   if (stripe_count < 1) stripe_count = 1;
-  int32_t bytes_per_stripe = (fb_size + stripe_count - 1) / stripe_count;
+  int stripe_h = ((int)height + stripe_count - 1) / stripe_count;
 
   for (int s = 0; s < stripe_count; s++) {
-    int32_t offset = s * bytes_per_stripe;
-    int32_t count  = bytes_per_stripe;
-    if (offset + count > fb_size) count = fb_size - offset;
-    memcpy(fb_data + offset, capture_buffer_ + offset, count);
+    int user_y = s * stripe_h;
+    int user_h = stripe_h;
+    if (user_y + user_h > (int)height) user_h = (int)height - user_y;
+    restore_stripe_user_space(user_y, user_h);
     e_ink.partial_update(*frame_buffer_1bit);
   }
 
