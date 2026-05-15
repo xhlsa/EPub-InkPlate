@@ -174,7 +174,19 @@ BookViewer::build_page_at(const PageLocs::PageId & page_id)
 
         ScreenBottom::show(page_locs.get_page_nbr(page_id), page_locs.get_page_count());
 
-        page.paint();
+        page.paint(true, false, false, /*skip_update=*/true);
+
+        int8_t page_turn_mode = 0;
+        config.get(Config::Ident::PAGE_TURN_MODE, &page_turn_mode);
+        if (page_turn_mode == 2) {
+          int8_t stripes = 4;
+          config.get(Config::Ident::PROGRESSIVE_STRIPES, &stripes);
+          screen.full_refresh_progressive(static_cast<int>(stripes));
+        } else if (page_turn_mode == 1) {
+          screen.update(true);
+        } else {
+          screen.update(false);
+        }
       }
       interp->show_stat();
       interp->release_fmt(new_fmt);

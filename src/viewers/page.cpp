@@ -274,7 +274,7 @@ Page::put_char_at(char ch, Pos pos, const Format & fmt)
 }
 
 void
-Page::paint(bool clear_screen, bool no_full, bool do_it)
+Page::paint(bool clear_screen, bool no_full, bool do_it, bool skip_update)
 {
   if (!do_it) if ((display_list.empty()) || (compute_mode != ComputeMode::DISPLAY)) return;
   
@@ -339,7 +339,7 @@ Page::paint(bool clear_screen, bool no_full, bool do_it)
     }
   }
 
-  screen.update(no_full);
+  if (!skip_update) screen.update(no_full);
 }
 
 void

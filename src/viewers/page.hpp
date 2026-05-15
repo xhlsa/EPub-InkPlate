@@ -273,7 +273,7 @@ class Page
      * @param no_full      Bypass partial update count control. Use with great caution!
      * @param do_it        Do the painting irrelevant of the compute mode
      */
-    void paint(bool clear_screen = true, bool no_full = false, bool do_it = false);
+    void paint(bool clear_screen = true, bool no_full = false, bool do_it = false, bool skip_update = false);
 
     void show_fmt(const Format & fmt, const char * spaces) const {
       #if DEBUGGING
