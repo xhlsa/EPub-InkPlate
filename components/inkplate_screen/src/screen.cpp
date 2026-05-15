@@ -12,6 +12,8 @@
 #include "screen.hpp"
 
 #include "esp.hpp"
+#include "esp_heap_caps.h"
+#include <cstring>
 
 #include <iomanip>
 
@@ -447,12 +449,62 @@ Screen::draw_glyph(
   }
 }
 
-void 
+void
 Screen::setup(PixelResolution resolution, Orientation orientation)
 {
   set_orientation(orientation);
   set_pixel_resolution(resolution, true);
+
+  if (resolution == PixelResolution::ONE_BIT && frame_buffer_1bit != nullptr) {
+    int32_t buf_size = frame_buffer_1bit->get_data_size();
+    if (capture_buffer_ != nullptr) { free(capture_buffer_); capture_buffer_ = nullptr; }
+    capture_buffer_ = static_cast<uint8_t *>(heap_caps_malloc(buf_size, MALLOC_CAP_SPIRAM));
+    if (capture_buffer_ == nullptr) {
+      capture_buffer_ = static_cast<uint8_t *>(malloc(buf_size));
+    }
+  }
+
   clear();
+}
+
+void
+Screen::full_refresh_progressive(int stripe_count)
+{
+  if (pixel_resolution != PixelResolution::ONE_BIT || capture_buffer_ == nullptr) {
+    if (pixel_resolution == PixelResolution::ONE_BIT) {
+      e_ink.update(*frame_buffer_1bit);
+    } else {
+      e_ink.update(*frame_buffer_3bit);
+    }
+    return;
+  }
+
+  uint8_t * fb_data = frame_buffer_1bit->get_data();
+  int32_t   fb_size = frame_buffer_1bit->get_data_size();
+
+  memcpy(capture_buffer_, fb_data, fb_size);
+
+  // Black flash
+  memset(fb_data, 0xFF, fb_size);
+  e_ink.update(*frame_buffer_1bit);
+
+  // White flash
+  memset(fb_data, 0x00, fb_size);
+  e_ink.update(*frame_buffer_1bit);
+
+  // Stripe reveals — buffer start = physical top of panel (orientation-dependent)
+  if (stripe_count < 1) stripe_count = 1;
+  int32_t bytes_per_stripe = (fb_size + stripe_count - 1) / stripe_count;
+
+  for (int s = 0; s < stripe_count; s++) {
+    int32_t offset = s * bytes_per_stripe;
+    int32_t count  = bytes_per_stripe;
+    if (offset + count > fb_size) count = fb_size - offset;
+    memcpy(fb_data + offset, capture_buffer_ + offset, count);
+    e_ink.partial_update(*frame_buffer_1bit);
+  }
+
+  partial_count = PARTIAL_COUNT_ALLOWED;
 }
 
 void 

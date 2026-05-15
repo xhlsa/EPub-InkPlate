@@ -99,11 +99,13 @@ class Screen : NonCopyable
     static uint16_t height;
 
     static Screen singleton;
-    Screen() : partial_count(0), 
-               frame_buffer_1bit(nullptr), 
+    Screen() : partial_count(0),
+               capture_buffer_(nullptr),
+               frame_buffer_1bit(nullptr),
                frame_buffer_3bit(nullptr) {};
 
     int16_t           partial_count;
+    uint8_t         * capture_buffer_;
     FrameBuffer1Bit * frame_buffer_1bit;
     FrameBuffer3Bit * frame_buffer_3bit;
     PixelResolution   pixel_resolution;
@@ -184,6 +186,7 @@ class Screen : NonCopyable
     inline Orientation get_orientation() { return orientation; }
     inline PixelResolution get_pixel_resolution() { return pixel_resolution; }
     inline void force_full_update() { partial_count = 0; }
+    void full_refresh_progressive(int stripe_count = 4);
 
     #if INKPLATE_6PLUS || INKPLATE_6PLUS_V2 || INKPLATE_6FLICK || INKPLATE_5V2
       void to_user_coord(uint16_t & x, uint16_t & y);
