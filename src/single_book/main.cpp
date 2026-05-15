@@ -63,7 +63,7 @@ static constexpr char const * TAG      = "single_book";
 static constexpr gpio_num_t   WAKE_PIN = GPIO_NUM_36;
 
 static constexpr uint32_t IDLE_POLL_MS          =   100;
-static constexpr uint32_t DEEP_SLEEP_TIMEOUT_MS = 30 * 60 * 1000;  // 30 minutes
+static constexpr uint32_t DEEP_SLEEP_TIMEOUT_MS = 3 * 60 * 1000 + 30 * 1000;  // 3.5 minutes
 
 // Returns the bare filename of the first .epub in BOOKS_FOLDER, or "".
 static std::string find_first_epub()
