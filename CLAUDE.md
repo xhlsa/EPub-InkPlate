@@ -77,6 +77,38 @@ Config.txt values like `show_heap=1`, `show_title=1`, `resolution=1` are **ignor
 - **Do not call `screen.force_full_update()` before page turns** — it resets the counter to 0, forcing a full refresh (8 clean passes + 5 frame scans, ~2× slower) on every page turn
 - `force_full_update()` is appropriate only for the status overlay and message viewer, which paint over live content and need a clean slate
 
+### Progressive Page-Turn Refresh (`page_turn_mode = 2`, the default)
+
+Body page turns go through `book_viewer.cpp:build_page_at()` → `page.paint(skip_update=true)` → dispatch on `config.get(PAGE_TURN_MODE)`:
+
+| mode | behaviour |
+|------|-----------|
+| 0 | normal — `screen.update(false)`, partial_count managed |
+| 1 | force full — `screen.update(true)` |
+| 2 | progressive — `screen.full_refresh_progressive()` (**default**) |
+
+`full_refresh_progressive()` (`components/inkplate_screen/src/screen.cpp`):
+1. `memcpy` the rendered framebuffer into `capture_buffer_` (PSRAM, allocated in `setup()`)
+2. `memset(fb, 0xFF)` → `e_ink.partial_update()` — **black flash** (0xFF = all black in 1-bit)
+3. `memset(fb, 0x00)` → `e_ink.partial_update()` — **white flash** (0x00 = all white)
+4. `memcpy` capture_buffer_ back → `e_ink.partial_update()` — full page restore
+
+Total: 3 partial waveform cycles per page turn. `partial_count` is set to 0 after each call so the next `screen.update()` call (status overlay, msg_viewer) forces a clean full refresh.
+
+**Bit polarity**: in the 1-bit framebuffer, bit SET = BLACK, bit CLEAR = WHITE. So `0xFF = all black`, `0x00 = all white`. Do not confuse with 3-bit mode.
+
+**Cold-boot behaviour**: on the very first page turn after power-on, `is_partial_allowed()` in the eink driver is false. `e_ink.partial_update()` falls back to the full 8-pass clean sequence for the black flash, producing multiple visible flashes. All subsequent page turns are clean 3-cycle sequences. This is accepted behaviour — no primer is installed.
+
+**Deep-sleep wake**: unknown whether `is_partial_allowed()` persists across deep sleep (ESP32 regular RAM is lost on deep sleep, so likely not). If wake-from-sleep shows the same cold-boot multi-flash, it needs a separate fix — do not conflate with the boot primer decision.
+
+**`capture_buffer_`**: allocated via `heap_caps_malloc(MALLOC_CAP_SPIRAM)` with `malloc()` fallback. Same size as the 1-bit framebuffer (115 200 bytes for 5V2). If `capture_buffer_` is null (allocation failed), `full_refresh_progressive()` falls back to `e_ink.update()`.
+
+**Config keys** (both readable from `/sdcard/config.txt`):
+```
+page_turn_mode=2        # 0/1/2 — default 2
+progressive_stripes=4   # ignored in current implementation, reserved
+```
+
 ### Sleep & Wake
 - Deep sleep via `inkplate_platform.deep_sleep(GPIO_NUM_36, 0)` — wake pin is GPIO 36, active LOW
 - Wake detection: `esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT0`
