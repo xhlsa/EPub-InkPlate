@@ -9,6 +9,8 @@
 #   0x910000 – 0xFFFFFF  ~7 MB free  (reserved for future OTA partition)
 #
 # otadata removed — OTA is out of scope for this build.
+# To add OTA later: restore otadata at 0xD000 (8 KB), shrink nvs back to
+# 16 KB, split factory into ota_0 + ota_1, and add esp_ota calls in main.
 # NVS expanded from 16 KB to 24 KB.  The region 0xD000–0xEFFF previously
 # held otadata; the NVS library silently reformats those sectors on first
 # boot.  Existing NVS entries at 0x9000–0xCFFF are preserved.

@@ -134,9 +134,18 @@ static void mainTask(void * /*params*/)
   // --- Hardware init ---
   bool nvs_ok = nvs_mgr.setup();
 
-  // sd_card_init: pass CONFIG_USE_SD_CARD so the platform driver only
-  // initialises the SD stack when SD storage is actually in use.
-  bool platform_ok = inkplate_platform.setup(/*sd_card_init=*/CONFIG_USE_SD_CARD);
+  // sd_card_init: only initialise the SD driver stack when SD storage is in use.
+  // CONFIG_USE_SD_CARD is a Kconfig bool: defined as 1 when y, NOT defined (not 0)
+  // when n. Using it directly as a function argument would compile to setup() with
+  // no argument when disabled. Use #ifdef to produce an explicit true/false literal.
+  bool platform_ok = inkplate_platform.setup(
+      /*sd_card_init=*/
+#ifdef CONFIG_USE_SD_CARD
+      true
+#else
+      false
+#endif
+  );
   if (!platform_ok) {
     LOG_E("InkPlate platform setup failed — restarting.");
     esp_restart();
