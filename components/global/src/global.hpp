@@ -35,7 +35,15 @@
 #endif
 
 #if EPUB_INKPLATE_BUILD
-  #define MAIN_FOLDER "/sdcard"
+  // CONFIG_USE_SD_CARD is set by Kconfig (Kconfig.projbuild).
+  // Default is OFF — LittleFS partition in flash, mounted at /littlefs.
+  // Set CONFIG_USE_SD_CARD=y in sdkconfig (or via idf.py menuconfig) to
+  // revert to the original SD card path.
+  #if CONFIG_USE_SD_CARD
+    #define MAIN_FOLDER "/sdcard"
+  #else
+    #define MAIN_FOLDER "/littlefs"
+  #endif
   #define LOG_LOCAL_LEVEL EPUB_LOG_LEVEL
 #endif
 

@@ -42,6 +42,7 @@ set(components
     pthread
     freetype
     spi_flash
+    esp_littlefs
 )
 
 idf_component_register(SRCS ${app_sources} INCLUDE_DIRS "." REQUIRES ${components})

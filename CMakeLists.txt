@@ -77,3 +77,15 @@ add_compile_definitions(
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(EPub-InkPlate)
+
+# LittleFS image for single_book builds (Phase 2).
+# Populated from littlefs_root/ in the repository — copy book, fonts, and
+# fonts_list.xml there before building.
+#
+# NOT using FLASH_IN_PROJECT so that `idf.py flash` only flashes the app.
+# Flash the storage partition separately (book/fonts update without reflashing app):
+#   esptool.py --chip esp32 -p /dev/ttyUSB0 write_flash 0x310000 build_single/storage.bin
+#
+if(BUILD_VARIANT STREQUAL "single_book")
+    littlefs_create_partition_image(storage ${CMAKE_CURRENT_SOURCE_DIR}/littlefs_root)
+endif()

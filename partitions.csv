@@ -1,8 +1,20 @@
-# ESP-IDF Partition Table
-# Name,   Type, SubType, Offset,  Size, Flags
-nvs,      data, nvs,     0x9000,  0x4000,
-otadata,  data, ota,     0xd000,  0x2000,
-phy_init, data, phy,     0xf000,  0x1000,
-factory,  0,    0,       0x10000, 0x250000,
-#ota_0,    0,    ota_0,  0x160000, 0x150000,
-#ota_1,    0,    ota_1,  0x2B0000, 0x150000,
+# ESP-IDF Partition Table — Inkplate 5 Gen2 (16 MB flash)
+#
+# Address map:
+#   0x000000 – 0x008FFF  bootloader  (flashed by idf.py)
+#   0x009000 – 0x00EFFF  nvs         (24 KB; expanded from 16 KB; base MUST stay 0x9000)
+#   0x00F000 – 0x00FFFF  phy_init    ( 4 KB)
+#   0x010000 – 0x30FFFF  factory app ( 3 MB; verify with `idf.py size` before locking)
+#   0x310000 – 0x90FFFF  storage     ( 6 MB LittleFS; book + fonts + .locs cache)
+#   0x910000 – 0xFFFFFF  ~7 MB free  (reserved for future OTA partition)
+#
+# otadata removed — OTA is out of scope for this build.
+# NVS expanded from 16 KB to 24 KB.  The region 0xD000–0xEFFF previously
+# held otadata; the NVS library silently reformats those sectors on first
+# boot.  Existing NVS entries at 0x9000–0xCFFF are preserved.
+#
+# Name,     Type, SubType,  Offset,   Size,
+nvs,        data, nvs,      0x9000,   0x6000,
+phy_init,   data, phy,      0xf000,   0x1000,
+factory,    app,  factory,  0x10000,  0x300000,
+storage,    data, littlefs, 0x310000, 0x600000,

@@ -1,0 +1,9 @@
+# Book and font binaries — populate locally before flashing, don't commit
+books/*.epub
+fonts/*.ttf
+fonts/*.otf
+fonts/*.TTF
+fonts/*.OTF
+# Allow the gitkeep sentinels
+!books/.gitkeep
+!fonts/.gitkeep

@@ -164,6 +164,75 @@ else if (page_count != -1) {
 #endif
 ```
 
+## Phase 2: LittleFS storage
+
+### Overview
+Book, fonts, and `.locs` pagination cache moved from SD card to a 6 MB
+LittleFS partition in flash (`storage`, at 0x310000).  SD support
+remains behind `CONFIG_USE_SD_CARD` (Kconfig, default OFF).
+
+### Partition table (`partitions.csv`)
+| Partition | Offset | Size | Notes |
+|-----------|--------|------|-------|
+| nvs | 0x9000 | 24 KB | Expanded from 16 KB; base address unchanged |
+| phy_init | 0xF000 | 4 KB | |
+| factory (app) | 0x10000 | 3 MB | Verify fits with `idf.py size` before locking |
+| storage (LittleFS) | 0x310000 | 6 MB | Book + fonts + .locs cache |
+
+`otadata` removed — OTA out of scope.  The region 0xD000–0xEFFF
+previously held `otadata`; NVS silently reformats those sectors on
+first boot.  **NVS data at 0x9000 is preserved** across this reflash.
+
+### Path macros
+`MAIN_FOLDER` in `components/global/src/global.hpp` is `/littlefs` when
+`CONFIG_USE_SD_CARD=n` and `/sdcard` when `=y`.  `FONTS_FOLDER` and
+`BOOKS_FOLDER` derive from it.  The `.locs` cache path is derived from
+the epub path (`epub_filename.replace(.epub, .locs)`) so it moves
+automatically with the book.
+
+### Enabling SD card (reverting)
+```
+idf.py menuconfig → EPub-InkPlate Storage → [x] Use SD card for storage
+```
+Or add `CONFIG_USE_SD_CARD=y` to `sdkconfig.defaults`.
+
+### LittleFS image
+Source tree: `littlefs_root/` in the repository root.  See
+`littlefs_root/README.md` for layout and copy instructions.
+
+CMake generates `build_single/storage.bin` automatically for
+`BUILD_VARIANT=single_book` builds.  It is **not** included in the
+default `idf.py flash` — must be flashed separately:
+
+```bash
+# Flash storage partition only (book/fonts, leave app alone)
+esptool.py --chip esp32 -p /dev/ttyUSB0 write_flash 0x310000 build_single/storage.bin
+
+# Flash app only (firmware update, leave book alone)
+idf.py -C . -B build_single ... -p /dev/ttyUSB0 app-flash
+```
+
+### LittleFS mount / unmount
+Mounted at startup in `single_book/main.cpp` with `format_if_mount_failed=false` —
+if the partition is blank the device goes to deep sleep with a log error rather
+than formatting in-place (avoids silently erasing content on firmware bugs).
+
+`esp_vfs_littlefs_unregister("storage")` is called in `go_to_sleep()`
+before `deep_sleep()`.  LittleFS has power-loss journaling so unclean
+shutdown is safe, but an explicit unmount flushes pending writes.
+
+### .locs cache write access
+The `.locs` pagination cache is written to LittleFS on first open of a
+book.  Subsequent boots load it directly (fast path).  LittleFS wear
+levelling handles the repeated writes.  If the partition becomes full
+(unlikely with 6 MB for one book + fonts), the cache write silently
+fails and pagination recalculates on every cold boot.
+
+### NVS migration safety
+Do **not** erase NVS when reflashing for Phase 2.  Book position is
+keyed by Jenkins96 of the bare epub filename — as long as the filename
+doesn't change, the saved position survives the storage migration.
+
 ## NVS Position Persistence
 
 ### How it works

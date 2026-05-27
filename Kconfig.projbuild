@@ -1,0 +1,21 @@
+menu "EPub-InkPlate Storage"
+
+    config USE_SD_CARD
+        bool "Use SD card for storage (book, fonts, cache)"
+        default n
+        help
+            When enabled, the firmware reads the book, fonts, and pagination
+            cache from a microSD card mounted at /sdcard (original behaviour).
+
+            When disabled (default for single_book builds), the firmware uses
+            a LittleFS partition in flash mounted at /littlefs. The partition
+            label is "storage" and must be flashed separately with:
+
+              esptool.py --chip esp32 -p PORT write_flash 0x310000 build_single/storage.bin
+
+            The LittleFS image is built automatically by CMake from the
+            littlefs_root/ directory in the repository. Populate that
+            directory with the book, fonts, and fonts_list.xml before
+            building.
+
+endmenu

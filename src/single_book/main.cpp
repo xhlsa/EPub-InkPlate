@@ -57,6 +57,9 @@
 #include "utils/book_id.hpp"
 
 #include "esp_sleep.h"
+#if !CONFIG_USE_SD_CARD
+  #include "esp_littlefs.h"
+#endif
 
 extern "C" {
   #include <dirent.h>
@@ -108,6 +111,11 @@ static void persist_position(uint32_t                  book_id,
 static void go_to_sleep(uint32_t book_id, const PageLocs::PageId & page_id)
 {
   persist_position(book_id, page_id, true);
+  #if !CONFIG_USE_SD_CARD
+    // LittleFS has power-loss journaling but an explicit unmount flushes
+    // any pending writes and is good practice before cutting power.
+    esp_vfs_littlefs_unregister("storage");
+  #endif
   inkplate_platform.deep_sleep(WAKE_PIN, 0);
   // not reached
 }
@@ -126,11 +134,32 @@ static void mainTask(void * /*params*/)
   // --- Hardware init ---
   bool nvs_ok = nvs_mgr.setup();
 
-  bool platform_ok = inkplate_platform.setup(/*sd_card_init=*/true);
+  // sd_card_init: pass CONFIG_USE_SD_CARD so the platform driver only
+  // initialises the SD stack when SD storage is actually in use.
+  bool platform_ok = inkplate_platform.setup(/*sd_card_init=*/CONFIG_USE_SD_CARD);
   if (!platform_ok) {
     LOG_E("InkPlate platform setup failed — restarting.");
     esp_restart();
   }
+
+  // --- Storage mount ---
+  #if !CONFIG_USE_SD_CARD
+  {
+    esp_vfs_littlefs_conf_t lfs_conf = {
+      .base_path             = "/littlefs",
+      .partition_label       = "storage",
+      .format_if_mount_failed = false,   // never auto-format — content must be flashed
+      .dont_mount            = false,
+    };
+    esp_err_t lfs_err = esp_vfs_littlefs_register(&lfs_conf);
+    if (lfs_err != ESP_OK) {
+      LOG_E("LittleFS mount failed (%d). Flash the storage partition: "
+            "esptool.py write_flash 0x310000 build_single/storage.bin", lfs_err);
+      // Can't recover without storage — sleep and wait for reflash.
+      inkplate_platform.deep_sleep(WAKE_PIN, 0);
+    }
+  }
+  #endif
 
   // config failure is non-fatal: font index defaults to 0 (first USER font)
   config.read();
@@ -145,7 +174,7 @@ static void mainTask(void * /*params*/)
   page_locs.setup();   // spawns retriever + state threads
 
   if (!fonts.setup()) {
-    LOG_E("Font loading failed. Check /sdcard/fonts_list.xml.");
+    LOG_E("Font loading failed. Check " MAIN_FOLDER "/fonts_list.xml.");
     esp_restart();
   }
 
@@ -170,7 +199,13 @@ static void mainTask(void * /*params*/)
   if (book_fname.empty()) {
     msg_viewer.show(MsgViewer::MsgType::ALERT, false, true,
       "No Book Found",
-      "Place a .epub file in /sdcard/books/ then press WakeUp to restart.");
+      "Place a .epub in " BOOKS_FOLDER " then"
+#if CONFIG_USE_SD_CARD
+      " press WakeUp to restart."
+#else
+      " reflash storage partition."
+#endif
+      );
     ESP::delay(500);
     inkplate_platform.deep_sleep(WAKE_PIN, 0);
   }
