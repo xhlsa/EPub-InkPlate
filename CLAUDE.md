@@ -179,6 +179,29 @@ save() → books_dir.set_track_order(id, pos)
 ### NVS iterator leak (pre-existing, benign)
 In `NVSMgr::setup()`, if `res != ESP_OK` on the first `nvs_entry_find()` call, `nvs_release_iterator(it)` is still called with an invalid iterator. Harmless in practice (IDF handles null-ish iterators gracefully) but worth noting.
 
+## Power / Battery
+
+### CPU frequency
+`sdkconfig.defaults` sets `CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ=80`. The e-ink loop
+is almost entirely blocked on input — 80 MHz is sufficient for I2S-DMA rendering
+and cuts active draw from ~68 mA (240 MHz) to ~25 mA. Do not bump it back to
+240 MHz; if a future feature genuinely needs more headroom, use `esp_pm_configure`
+with DFS rather than raising the static ceiling.
+
+### Deep-sleep GPIO isolation (5V2)
+`inkplate_platform.cpp:deep_sleep()` isolates GPIO 0, 2, 32, 33 (the I2S e-ink
+bus outputs) and GPIO 12 (MISO) via `rtc_gpio_isolate()` before
+`esp_deep_sleep_start()`. The guard is `#if INKPLATE_5V2` — do not remove it.
+If new output GPIOs are added to the 5V2 eink bus, add them here too or they
+will leak current through the panel circuitry in deep sleep.
+
+### No forced debug logging
+`eink_5v2.cpp:setup()` previously called `esp_log_level_set(TAG, ESP_LOG_DEBUG)`
+unconditionally, overriding the build-level log config and firing UART writes on
+every page turn. Those lines have been removed. If you need debug output from the
+eink driver, set the level temporarily in your own code or via `idf.py monitor`
+log filters — do not re-add unconditional overrides to the driver.
+
 ## EInk Driver — 5V2-Specific Bugs (in submodule)
 
 ### Partial-refresh split-screen — `uint16_t pos` overflow (FIXED)
