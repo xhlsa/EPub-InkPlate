@@ -113,8 +113,33 @@ progressive_stripes=4   # ignored in current implementation, reserved
 - Deep sleep via `inkplate_platform.deep_sleep(GPIO_NUM_36, 0)` — wake pin is GPIO 36, active LOW
 - Wake detection: `esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT0`
 - **No sleep overlay** — e-ink retains the last page without power; the page IS the sleep indicator
-- On wake, skip the "Loading..." splash (panel already shows the page, silent reload feels seamless)
 - Auto-sleep after 30 minutes of inactivity
+
+#### Wake-time render skip (Phase 1)
+
+On `ESP_SLEEP_WAKEUP_EXT0` the initial `show_page()` call is skipped entirely.
+The e-ink panel keeps the previous page from retention; the user presses the
+button and the normal `full_refresh_progressive()` sequence runs as the first
+waveform cycle. On all other reset reasons (cold boot, brownout, reset button)
+`show_page()` runs immediately as before.
+
+**`rendered` flag:** a `bool rendered = false` is set to `true` after the first
+successful `show_page()`. `EVT_LONG` (status overlay) checks this flag: if still
+false on a wake-from-sleep boot, it calls `show_page()` first. Without this,
+`partial_allowed` is `false` (reset by deep-sleep reinitialisation), so the
+partial call inside the overlay falls back to `e_ink::update()` with an empty
+framebuffer — producing a blank white panel instead of the overlay drawn over
+the retained page.
+
+**Reason `partial_allowed` is false after wake:** it is a member of the `EInk`
+singleton (normal RAM), which is re-initialised to `false` on every boot because
+deep sleep loses all non-RTC RAM. `allow_partial()` is only set at the end of
+`e_ink.update()` (full waveform cycle). On a wake boot where we skip
+`show_page()`, no full cycle runs until the first button press.
+
+**Do not** add a separate "cold-boot primer" full refresh to reset
+`partial_allowed` — that's exactly the redundant flash this phase removes.
+Let the first user-initiated page turn own the cold/wake full-cycle cost.
 
 ### Config Guards (compile-time suppression)
 Single_book suppresses UI elements that don't belong in a minimal reader. Do not add runtime config reads for these:

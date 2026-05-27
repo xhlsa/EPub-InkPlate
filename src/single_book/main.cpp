@@ -5,14 +5,14 @@
 // Single-book BUILD_VARIANT entry point.
 //
 // Replaces src/main.cpp + the full controller stack with a minimal loop
-// that opens the first .epub found on the SD card, restores the last-read
-// position from NVS, and maps one physical button (GPIO 36, active LOW)
-// to page navigation and sleep.
+// that opens the first .epub found on SD (or LittleFS — see Phase 2),
+// restores the last-read position from NVS, and maps one physical button
+// (GPIO 36, active LOW) to page navigation and sleep.
 //
-// SD card requirements (same layout as the full firmware):
-//   /sdcard/fonts_list.xml
-//   /sdcard/fonts/          (font files declared in fonts_list.xml)
-//   /sdcard/books/*.epub    (at least one)
+// Storage requirements (same layout as the full firmware):
+//   MAIN_FOLDER/fonts_list.xml
+//   MAIN_FOLDER/fonts/          (font files declared in fonts_list.xml)
+//   MAIN_FOLDER/books/*.epub    (at least one)
 //
 // Button gestures (GPIO 36):
 //   short press  → next page
@@ -21,10 +21,16 @@
 //   very long    → save position + deep sleep
 //   idle 30 min  → auto deep sleep
 //
-// Sleep behaviour: no "going to sleep" message is shown — the e-ink panel
-// retains the last book page without power, so the page IS the sleep indicator.
-// On wake the device re-renders the same page from NVS; cold boots show a
-// brief "Loading..." splash, wake-from-sleep skips it.
+// Wake behaviour (Phase 1):
+//   Cold boot (power-on / reset / brownout): renders the saved page immediately.
+//   Wake from deep sleep (ESP_SLEEP_WAKEUP_EXT0): skips the initial render —
+//   the e-ink panel already shows the previous page from retention. The first
+//   button press triggers the normal black/white/render sequence.
+//
+//   Overlay safety: if EVT_LONG fires before the first page turn on a
+//   wake-from-sleep boot, show_page() is called first so the overlay
+//   has a valid framebuffer to draw over (avoids blank-panel partial refresh
+//   caused by partial_allowed=false after deep-sleep reinitialisation).
 
 #define __GLOBAL__ 1
 #include "global.hpp"
@@ -217,9 +223,16 @@ static void mainTask(void * /*params*/)
                                        ? *id
                                        : PageLocs::PageId(0, 0);
 
-  // Initial render — partial_count is 0 after screen.setup(), so this is already
-  // a full refresh. force_full_update() is redundant here but kept for clarity.
-  show_page(current_page_id);
+  // On cold boot: render the saved page immediately (panel state unknown —
+  // we need at least one full waveform cycle to establish a clean baseline).
+  // On wake from deep sleep: skip — the panel already shows the correct page
+  // from e-ink retention. The first button press will do the normal
+  // black/white/render sequence, which is the right moment for a waveform cycle.
+  bool rendered = false;
+  if (!waking) {
+    show_page(current_page_id);
+    rendered = true;
+  }
 
   // --- Button manager ---
   WakeButtonMgr buttons(WAKE_PIN);
@@ -239,6 +252,7 @@ static void mainTask(void * /*params*/)
         if (next != nullptr) {
           current_page_id = *next;
           show_page(current_page_id);
+          rendered = true;
           persist_position(book_id, current_page_id, false);
         }
         last_activity_ms = ESP::millis();
@@ -251,6 +265,7 @@ static void mainTask(void * /*params*/)
         if (prev != nullptr) {
           current_page_id = *prev;
           show_page(current_page_id);
+          rendered = true;
           persist_position(book_id, current_page_id, false);
         }
         last_activity_ms = ESP::millis();
@@ -258,6 +273,15 @@ static void mainTask(void * /*params*/)
       }
 
       case ButtonEvent::EVT_LONG:
+        // If the overlay fires before the first page render on a wake-from-sleep
+        // boot, partial_allowed is still false (reset by deep-sleep reinit) and
+        // the partial_update call inside ScreenBottom::show() would fall back to
+        // e_ink::update() with an empty framebuffer — producing a blank panel.
+        // Render the current page first so the overlay has something to draw over.
+        if (!rendered) {
+          show_page(current_page_id);
+          rendered = true;
+        }
         StatusOverlay::show(current_page_id);
         last_activity_ms = ESP::millis();
         break;
