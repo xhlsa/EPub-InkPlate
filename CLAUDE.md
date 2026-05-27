@@ -141,6 +141,19 @@ deep sleep loses all non-RTC RAM. `allow_partial()` is only set at the end of
 `partial_allowed` — that's exactly the redundant flash this phase removes.
 Let the first user-initiated page turn own the cold/wake full-cycle cost.
 
+**Overlay waveform count on wake (`EVT_LONG` before first page turn):**
+`full_refresh_progressive()` always sets `partial_count = 0` at the end.
+`screen.update(no_full=false)` with `partial_count <= 0` calls
+`e_ink.update()` (full waveform), not `e_ink.partial_update()`.
+So `EVT_LONG` on a wake boot (rendered=false) produces:
+1. `show_page()` → `full_refresh_progressive()` → **3 partials** (black / white / page)
+2. `StatusOverlay::show()` → `page.paint(false)` → `screen.update(false)` → `partial_count=0` → **1 full waveform**
+
+Total: **4 waveforms**. This is identical to a normal `EVT_LONG` after any page
+turn — `partial_count` is always 0 after `full_refresh_progressive()`, so the
+overlay always gets a full waveform. This is intentional: the overlay draws over
+live content and needs a ghost-free baseline.
+
 ### Config Guards (compile-time suppression)
 Single_book suppresses UI elements that don't belong in a minimal reader. Do not add runtime config reads for these:
 
@@ -228,6 +241,51 @@ levelling handles the repeated writes.  If the partition becomes full
 (unlikely with 6 MB for one book + fonts), the cache write silently
 fails and pagination recalculates on every cold boot.
 
+### Kconfig bool=n is undefined, not 0
+ESP-IDF `Kconfig` booleans set to `n` are **not defined** in `sdkconfig.h`
+(absent, not `#define CONFIG_X 0`).  Using them directly as a C++
+function argument produces a compile error when disabled:
+
+```cpp
+// WRONG — compiles to setup() with no argument when CONFIG_USE_SD_CARD=n
+inkplate_platform.setup(CONFIG_USE_SD_CARD);
+
+// RIGHT — #ifdef produces an explicit true/false literal
+inkplate_platform.setup(
+#ifdef CONFIG_USE_SD_CARD
+    true
+#else
+    false
+#endif
+);
+```
+
+`#if !CONFIG_USE_SD_CARD` guards (preprocessor arithmetic) are fine —
+the preprocessor treats an undefined identifier as 0, so `!0 = 1`
+correctly includes the LittleFS block when SD is disabled.  Only
+direct use as a value (function arg, variable init, array size) fails.
+
+### Phase 2 first-boot checklist
+Run these in order after flashing for the first time:
+
+1. **App only, no storage.bin** — boot and confirm the device logs a
+   LittleFS mount error and goes to deep sleep cleanly (validates the
+   `format_if_mount_failed=false` + sleep fallback path, not a crash).
+2. **Flash storage.bin** — reboot; confirm fonts load and book opens.
+   Watch serial for `.locs` cache generation messages — if it tries to
+   load a missing cache and doesn't fall through to generation, that's
+   a path bug to catch early.
+3. **Reflash app only** (do not reflash storage.bin) — confirm book
+   still opens and resumes at the same page. Verifies the two partitions
+   are independent.
+4. **Reflash storage.bin only** (do not reflash app) — confirm new book
+   content is picked up. Verifies the storage partition can be updated
+   independently of the firmware.
+5. **NVS position note** — NVS keys from the SD era reference the old
+   book by Jenkins96 hash of the bare filename. If the filename is
+   unchanged the saved position survives; if changed the device lands
+   on page 1 (no data loss, one-time reset). No need to erase NVS.
+
 ### NVS migration safety
 Do **not** erase NVS when reflashing for Phase 2.  Book position is
 keyed by Jenkins96 of the bare epub filename — as long as the filename
@@ -239,7 +297,7 @@ doesn't change, the saved position survives the storage migration.
 - Book ID = Jenkins96 hash of the **bare epub filename** (not full path)
 - `nvs_mgr.save_location(book_id, data)` stores `{itemref_index, offset, was_shown}`
 - `nvs_mgr.get_location(book_id, nvs_data)` restores on boot
-- NVS partition: 0x9000–0xD000 (16KB), sufficient for 10 books
+- NVS partition: 0x9000–0xEFFF (24 KB after Phase 2 partition expansion), sufficient for 10+ books
 
 ### Critical bug — books_dir iterator crash (FIXED)
 `NVSMgr::save()` and `NVSMgr::remove()` both called `books_dir.set_track_order()`.
